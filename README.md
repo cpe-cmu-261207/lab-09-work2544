@@ -14,4 +14,4 @@ https://o365cmu-my.sharepoint.com/:b:/g/personal/chayanin_s_cmu_ac_th1/ERJ_PdfpF
 
 ลองส่ง request ไปยัง API ที่เสร็จสมบูรณ์แล้วได้ที่ : https://lab-09-finished-261207.herokuapp.com/
 
-เมื่อ Deploy app เรียบร้อยแล้ว ให้ใส่ URL ที่นี่ : 
+เมื่อ Deploy app เรียบร้อยแล้ว ให้ใส่ URL ที่นี่ : https://lap9-630610759.herokuapp.com/
