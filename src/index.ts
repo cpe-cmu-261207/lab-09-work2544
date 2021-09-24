@@ -57,7 +57,7 @@ app.get('/user/login', async (req, res) => {
 app.post('/user/regis', async (req, res) => {  
   const user=req.body;
   let ReqKey=Object.keys(req.body)
-  if ('username'==ReqKey[0]&&'password'==ReqKey[1]&&'role'==ReqKey[2]&&ReqKey.length===3)  
+  if ('username'==ReqKey[0]&&'password'==ReqKey[1]&&'role'==ReqKey[2])  
   {
     const username = user.username
     const password=user.password
@@ -72,7 +72,7 @@ app.post('/user/regis', async (req, res) => {
         return res.status(400).json({status: 'failed', message: 'Invalid input'})
        }
        
-    if(user.role=="admin")
+    if(user.role=="admin"&&ReqKey.length===3)
     {
       if(user.money!=null)
       {
@@ -82,7 +82,7 @@ app.post('/user/regis', async (req, res) => {
       users.push(user)
       return res.status(200).json({status: 'success', username:username})
     }
-    else if(user.role=="customer")
+    else if(user.role=="customer"&&ReqKey.length===4)
     {
       if(user.money==null)
       {
