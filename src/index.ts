@@ -9,7 +9,7 @@ declare global {
 
 import express, { Request, Response, NextFunction } from 'express'
 import auth from 'basic-auth'
-import jwt from 'jsonwebtoken'
+import jwt, { decode } from 'jsonwebtoken'
 import bcrypt, { hash } from 'bcrypt'
 
 const app = express()
@@ -19,7 +19,7 @@ app.use(express.urlencoded({
 }));
 
 type Role = 'admin' | 'customer'
-type UserorOther=User|any
+
 type User = {
   username: string
   password: string
@@ -40,6 +40,7 @@ var users: User[] = [...initialUsers]
 const SECRET = 'mysecret'
 type MyJwtPayload = {
   username: string
+  role: Role
 } & jwt.JwtPayload
 
 app.get('/user/login', async (req, res) => {
@@ -48,52 +49,14 @@ app.get('/user/login', async (req, res) => {
   const username = user.name
   const password = user.pass
   const foundUser = users.find(x => x.username === username && bcrypt.compareSync(password, x.password))
-  console.log(users)
-  if (!foundUser) return res.status(404).json({ status: 'failed',"message" : "Invalid username or password" })
-  const token = jwt.sign({ username }, SECRET, { expiresIn: '10h' })
+  const role = foundUser?.role
+  if (!foundUser) return res.status(404).json({ status: 'failed', "message": "Invalid username or password" })
+  const token = jwt.sign({ username, role }, SECRET, { expiresIn: '10h' })
   return res.json({ status: 'success', token })
 })//ok
-
-app.post('/user/regis', async (req, res) => {  
-  const user=req.body;
-  let ReqKey=Object.keys(req.body)
-  if ('username'==ReqKey[0]&&'password'==ReqKey[1]&&'role'==ReqKey[2])  
-  {
-    const username = user.username
-    const password=user.password
-    if(users.find(x=>x.username===username)!==undefined)
-    {
-      return res.status(400).json({status: 'failed', message: 'Username is already used'})
-    }
-    if(typeof(user.username)!=="string"&&
-       typeof(user.password)!=="string"&&
-       typeof(user.role)!=="string")
-       {
-        return res.status(400).json({status: 'failed', message: 'Invalid input'})
-       }
-       
-    if(user.role=="admin"&&ReqKey.length===3)
-    {
-      if(user.money!=null)
-      {
-        return res.status(400).json({status: 'failed', message: 'Invalid input'})
-      }
-      user.password=bcrypt.hashSync(password,10)
-      users.push(user)
-      return res.status(200).json({status: 'success', username:username})
-    }
-    else if(user.role=="customer"&&ReqKey.length===4)
-    {
-      if(user.money==null)
-      {
-        return res.status(400).json({status: 'failed', message: 'Invalid input'})
-      }
-      user.password=bcrypt.hashSync(password,10)
-      users.push(user)
-      return res.status(200).json({status: 'success', username:username})
-    }
-  }  
-    return res.status(401).json({status: 'failed', message: 'Authentication failed'})
+app.delete('/reset', (req, res) => {
+  users = [initialUsers[0]]
+  return res.json({ status: 'success' })
 })//ok
 const checkToken = async (req: Request, res: Response, next: NextFunction) => {
   const bearerHeader = req.headers['authorization']
@@ -103,51 +66,114 @@ const checkToken = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const decoded = jwt.verify(token, SECRET) as MyJwtPayload
       const username = decoded.username
+      const role = decoded.role
       req.username = username
+      req.role = role
       next()
     } catch {
-      return res.status(401).json({ status: 'failed'})
+      return res.status(401).json({ status: 'failed' })
     }
   }
   else
     return res.status(401).json({ status: 'failed' })
-}
-app.get('/money',checkToken, async (req, res) => {
+}//ok
+
+app.post('/user/regis', async (req, res) => {
+  const bearerHeader = req.headers['authorization']
+  if (bearerHeader) {
+    const splited = bearerHeader.split(' ')
+    const token = splited[1]
+    try {
+      const decoded = jwt.verify(token, SECRET) as MyJwtPayload
+      const username = decoded.username
+      const foundUser = users.find(x => x.username === username) as User
+      if (!foundUser || foundUser.role != "admin") return res.status(401).json({ status: 'failed', message: 'Authentication failed' })
+      const user = req.body;
+      let ReqKey = Object.keys(req.body)
+      if ('username' == ReqKey[0] && 'password' == ReqKey[1] && 'role' == ReqKey[2]) {
+        const username = user.username
+        const password = user.password
+        if (users.find(x => x.username === username) !== undefined) { return res.status(400).json({ status: 'failed', message: 'Username is already used' }) }
+        if (typeof (user.username) !== "string" && typeof (user.password) !== "string" && typeof (user.role) !== "string") { return res.status(400).json({ status: 'failed', message: 'Invalid input' }) }
+        if (user.role == "admin" && ReqKey.length === 3) {
+          if (user.money != null) {
+            return res.status(400).json({ status: 'failed', message: 'Invalid input' })
+          }
+          user.password = bcrypt.hashSync(password, 10)
+          users.push(user)
+          return res.status(200).json({ status: 'success', username: username })
+        }
+
+        if (user.role == "customer" && ReqKey.length === 4) {
+          if (user.money == null) {
+            return res.status(400).json({ status: 'failed', message: 'Invalid input' })
+          }
+          user.password = bcrypt.hashSync(password, 10)
+          users.push(user)
+          return res.status(200).json({ status: 'success', username: username })
+        }
+
+      }
+
+      return res.status(401).json({ status: 'failed', message: 'Invalid input' })
+    } catch {
+      return res.status(401).json({ status: 'failed', message: 'Authentication failed' })
+    }
+  }
+  else
+    return res.status(401).json({ status: 'failed', message: 'Authentication failed' })
+
+})//ok
+
+app.get('/money', checkToken, async (req, res) => {
   const foundUser = users.find(x => x.username === req.username) as User
-  if (!foundUser||foundUser.role=="admin")  return res.status(401).json({status: 'failed', message: 'Authentication failed'})
+  if (!foundUser || foundUser.role == "admin") return res.status(401).json({ status: 'failed', message: 'Authentication failed' })
   return res.json({
     status: 'success',
     username: foundUser.username,
     money: foundUser.money
-  })  
+  })
 })
 
 app.put('/money/topup', (req, res) => {
-  let ReqKey=Object.keys(req.body)
-  if ('username'==ReqKey[0]&&'amount'==ReqKey[1]&&ReqKey.length===2)  
-  {
-  const foundUser = users.find(x => x.username === req.body.username) as User
-  if (!foundUser)  return res.status(401).json({status: 'failed', message: 'Authentication failed'})
-  const amount = req.body.amount
-  if(amount<0||foundUser.role=="admin")
-  return res.status(400).json({status: 'failed', message: "Invalid input"})
-  foundUser.money += amount
-  return res.json({
-    status: 'success',
-    username:foundUser.username,
-    money: foundUser.money
-  })
-}
-else
-{
-  return res.status(401).json({status: 'failed', message: 'Authentication failed'})
-}
+  const bearerHeader = req.headers['authorization']
+  if (bearerHeader) {
+    const splited = bearerHeader.split(' ')
+    const token = splited[1]
+    try {
+      const decoded = jwt.verify(token, SECRET) as MyJwtPayload
+      const username = decoded.username
+      const role = decoded.role
+      let ReqKey = Object.keys(req.body)
+      const foundUsers = users.find(x => x.username === username) as User
+      if (!foundUsers || foundUsers.role != "admin") return res.status(401).json({ status: 'failed', message: 'Authentication failed' })
+
+      if ('username' == ReqKey[0] && 'amount' == ReqKey[1] && ReqKey.length === 2 && role === "admin") {
+        const foundUser = users.find(x => x.username === req.body.username) as User
+        if (!foundUser ) return res.status(401).json({ status: 'failed', message: 'Authentication failed' })
+        const amount = req.body.amount
+        if (amount < 0|| foundUser.role === "admin")
+          return res.status(400).json({ status: 'failed', message: "Invalid input" })
+        foundUser.money += amount
+        return res.json({
+          status: 'success',
+          username: foundUser.username,
+          money: foundUser.money
+        })
+      }
+      else {
+        return res.status(401).json({ status: 'failed', message: 'Authentication failed' })
+      }
+    } catch {
+      return res.status(401).json({ status: 'failed', message: 'Authentication failed' })
+    }
+  }
+  else
+  return res.status(401).json({ status: 'failed', message: 'Authentication failed' })
+
 })
 
-app.delete('/reset', (req, res) => {
-  users=[initialUsers[0]]
-  return res.json({status: 'success'})
-})
+
 
 const port = process.env.PORT || 3000
 app.listen(port, () => {
